@@ -1,0 +1,119 @@
+import urlparse
+
+DEVELOPER_KEY = 'AI39si7PodNU93CVDU6kxh3-m2R9hkwqoVrfijDMr0L85J94ZrJFlimNxzFA9cSky9jCSHz9epJdps8yqHu1wb743d_SfSCRWA'
+YOUTUBE_VIDEO_DETAILS = 'http://gdata.youtube.com/feeds/api/videos/%s?v=2&alt=jsonc'
+ARD_VIDEO_FORMATS =	['S',		'M',	'L']
+ARD_FMT =			['0',		'1',	'2']
+ARD_CONTAINERS =	['mp4',		'mp4',	'mp4']
+ARD_VIDEORES =		['360',		'720',	'1080']
+ARD_VIDEOCODEC =	['h264',	'h264',	'h264']
+ARD_AUDIOCODEC =	['aac',		'aac',	'aac']
+
+HTTP_HEADERS = {'X-GData-Key':'key=%s' % DEVELOPER_KEY}
+#														  (1, 0, "", "http://mvideos.daserste.de/videoportal/Film/c_380000/384442/format479261.mp4", "default");
+RE_MEDIA_STREAMS = Regex('mediaCollection\.addMediaStream\(.*([0-9]+),.*([0-9]+).*,.*"([^"]*)",.*"([^"]*)",.*.*"([^"]*)"\);')
+RE_URL_MAP = Regex('"url_encoded_fmt_stream_map".+?"([^"]+)')
+RE_URL_MAP_ALT = Regex('&amp;url_encoded_fmt_stream_map=(.+?)&amp;')
+RE_PATH_1 = Regex('^/(watch|details)(_popup)?')
+RE_PATH_2 = Regex('^/[^/]+$')
+RE_VID_ID = Regex('/(v|e(mbed)?)/(v/)?(?P<id>.{11})')
+RE_VID_PID = Regex('pid=(.{11})')
+RE_VIDEO_ID = Regex('"video_id":\s"([^"]+)')
+
+####################################################################################################
+def NormalizeURL(url):
+  return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+  try:
+    details = HTML.ElementFromURL(url, cacheTime=CACHE_1HOUR)
+  except:
+    raise Ex.MediaNotAuthorized
+  
+  title = details.xpath('//meta[@name="dcterms.title"]/@content')[0]
+  Log(title)
+  summary = details.xpath('//meta[@name="dcterms.abstract"]/@content')[0]
+  thumb = details.xpath('//meta[@itemprop="image"]/@content')[0]
+  available = Datetime.ParseDate(details.xpath('//meta[@property="video:release_date"]/@content')[0]).date()
+  duration = int(details.xpath('//meta[@property="video:duration"]/@content')[0]) * 1000
+  
+  return VideoClipObject(
+    title = title,
+    summary = summary,
+    thumb = Resource.ContentsOfURLWithFallback(thumb),
+    originally_available_at = available,
+    duration = duration
+  )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+  ret = []
+
+  fmts = list(ARD_VIDEO_FORMATS)
+  fmts.reverse()
+
+  for fmt in fmts:
+    index = ARD_VIDEO_FORMATS.index(fmt)
+
+    ret.append(MediaObject(
+      parts = [PartObject(key=Callback(PlayVideo, url=url, default_fmt=fmt))],
+      container = ARD_CONTAINERS[index],
+      video_codec = ARD_VIDEOCODEC[index],
+      audio_codec = ARD_AUDIOCODEC[index],
+      video_resolution = ARD_VIDEORES[index],
+      optimized_for_streaming = (ARD_CONTAINERS[index] == 'mp4'),
+    ))
+
+  return ret
+
+####################################################################################################
+def PickMatch(fmts, index, match_format):
+
+  fmt = None
+  desired_container = ARD_CONTAINERS[index]
+  desired_codec = ARD_VIDEOCODEC[index]
+
+  # See if we can find the right quality.
+  for i in reversed(range(0, index+1)):
+    if ARD_FMT[i] in fmts:
+      this_container = ARD_CONTAINERS[i]
+      this_codec = ARD_VIDEOCODEC[i]
+      if match_format == False or (this_container == desired_container and this_codec == desired_codec):
+        Log(" -> PICKED %s %s/%s %s", ARD_CONTAINERS[i], ARD_VIDEOCODEC[i], ARD_AUDIOCODEC[i], ARD_VIDEORES[i])
+        fmt = ARD_FMT[i]
+        break
+
+  return fmt
+
+####################################################################################################
+@indirect
+def PlayVideo(url=None, default_fmt=None):
+
+  if not url:
+    return None
+  
+  try:
+    ard_page = HTTP.Request(url, cacheTime=CACHE_1HOUR).content
+  except:
+    raise Ex.MediaNotAvailable
+  
+  Log(ard_page)
+  streams = RE_MEDIA_STREAMS.findall(ard_page)
+  Log(streams)
+  
+  if not streams:
+    raise Ex.MediaNotAvailable
+
+  final_url = ''
+  index = ARD_VIDEO_FORMATS.index(default_fmt)
+  for s in streams:
+    if(s[0] == '1' and s[1] == ARD_FMT[index] and s[2] == ''):
+      final_url = s[3];
+      break
+  
+  
+  Log("VIDEO URL (fmt=%s): %s", default_fmt, final_url)
+
+  return IndirectResponse(VideoClipObject, key=final_url)
