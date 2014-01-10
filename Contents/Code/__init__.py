@@ -14,6 +14,7 @@ from collections import OrderedDict
 ####################################################################################################
 
 SENDUNGENAZURL = 'http://www.ardmediathek.de/ard/servlet/ajax-cache/3551682/view=module/index.html'
+MOSTVIEWEDURL = 'http://www.ardmediathek.de/ard/servlet/ajax-cache/3516192/view=list/show=%s/index.html'
 
 RE_SENDUNGVERPASSTLISTE = Regex('var sendungVerpasstListe = (\[[^\]]+\]);')
 RE_DOCUMENTID = Regex('\?documentId=([0-9]+)$')
@@ -61,6 +62,8 @@ def Start():
 def MainMenu():
     oc = ObjectContainer()
     oc.add(DirectoryObject(key=Callback(SendungenAZ, name="Sendungen A-Z"), title="Sendungen A-Z"))
+    oc.add(DirectoryObject(key=Callback(MostViewed, name="Meistabgerufene Clips - Heute", type='recent'), title="Meistabgerufene Clips - Heute"))
+    oc.add(DirectoryObject(key=Callback(MostViewed, name="Meistabgerufene Clips - Gesamt", type='all'), title="Meistabgerufene Clips - Gesamt"))
 
     for item in CATEGORY:
         oc.add(DirectoryObject(key=Callback(Sendung, name=item[0].decode(encoding="utf-8", errors="ignore"), documentId=item[2]), title=item[0].decode(encoding="utf-8", errors="ignore")))
@@ -90,6 +93,25 @@ def SendungenAZList(char):
         title = html_decode(sendung['titel'])
         documentId = RE_DOCUMENTID.findall(sendung['link'])[0]
         oc.add(DirectoryObject(key=Callback(Sendung, name=title, documentId=documentId), title=title))
+    return oc
+
+@route('/video/ardmediathek/mostviewed/{type}')
+def MostViewed(name, type):
+    oc = ObjectContainer(title2=name)
+    content = HTML.ElementFromURL(MOSTVIEWEDURL % type).xpath('//div[@class="mt-media_item"]')
+    for item in content:
+        link  = item.xpath('./h3[@class="mt-title"]/a')[0]
+        title = link.text
+        url   = BASE_URL + link.get('href')
+        summary = item.xpath('./p[@class="mt-source mt-tile-view_hide"]')[0].text
+        Log(summary)
+        thumb = BASE_URL + item.xpath('./div[@class="mt-image"]/img/@src')[0]
+        oc.add(VideoClipObject(
+            url = url,
+            title = title,
+            summary = summary,
+            thumb = thumb
+        ))
     return oc
 
 
