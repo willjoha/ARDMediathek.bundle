@@ -21,6 +21,7 @@ PROGRAMURL = 'http://www.ardmediathek.de/ard/servlet/ajax-cache/3516962/view=lis
 
 RE_SENDUNGVERPASSTLISTE = Regex('var sendungVerpasstListe = (\[[^\]]+\]);')
 RE_DOCUMENTID = Regex('\?documentId=([0-9]+)$')
+RE_AIRTIME = Regex('([0-3][0-9]\.[0-1][0-9]\.[0-9][0-9]) ([0-9]*:[0-9][0-9]) min')
 
 SENDUNGENAZ = OrderedDict()
 SENDUNGENAZ['ABC']  = Regex('^[A-Ca-c]')
@@ -105,14 +106,19 @@ def MostViewed(name, type):
         link  = item.xpath('./h3[@class="mt-title"]/a')[0]
         title = link.text
         url   = BASE_URL + link.get('href')
-        summary = item.xpath('./p[@class="mt-source mt-tile-view_hide"]')[0].text
-        Log(summary)
+        summary = item.xpath('./p[@class="mt-source mt-tile-view_hide"]')[0].text + ' | ' + item.xpath('./p[@class="mt-airtime_channel"]/span[@class="mt-channel mt-tile-view_hide"]')[0].text
+        airtime = item.xpath('./p[@class="mt-airtime_channel"]/span[@class="mt-airtime"]')[0].text
+        at = RE_AIRTIME.findall(airtime)[0]
+        duration = Datetime.MillisecondsFromString(at[1])
+        date = Datetime.ParseDate(at[0])
         thumb = BASE_URL + item.xpath('./div[@class="mt-image"]/img/@src')[0]
         oc.add(VideoClipObject(
             url = url,
             title = title,
             summary = summary,
-            thumb = thumb
+            thumb = thumb,
+            originally_available_at=date,
+            duration = duration
         ))
     return oc
 
@@ -126,12 +132,18 @@ def Sendung(name, documentId, page=1):
         title = link.text
         url   = BASE_URL + link.get('href')
         summary = item.xpath('./p[@class="mt-source mt-tile-view_hide"]')[0].text + ' | ' + item.xpath('./p[@class="mt-airtime_channel"]/span[@class="mt-channel mt-tile-view_hide"]')[0].text
+        airtime = item.xpath('./p[@class="mt-airtime_channel"]/span[@class="mt-airtime"]')[0].text
+        at = RE_AIRTIME.findall(airtime)[0]
+        duration = Datetime.MillisecondsFromString(at[1])
+        date = Datetime.ParseDate(at[0])
         thumb = BASE_URL + item.xpath('./div[@class="mt-image"]/img/@src')[0]
         oc.add(VideoClipObject(
             url = url,
             title = title,
             summary = summary,
-            thumb = thumb
+            thumb = thumb,
+            originally_available_at=date,
+            duration = duration
         ))
     if(len(content.xpath('//a[@class="mt-view-level-3_pager mt-icon mt-icon-arrowbig_right ajax-paging"]/@href')) == 1):
         oc.add(NextPageObject(key=Callback(Sendung, name=name, documentId=documentId, page=str(int(page)+1)), title=str("Weitere Beiträge").decode('utf-8', 'strict'), summary=None, thumb="more.png"))
