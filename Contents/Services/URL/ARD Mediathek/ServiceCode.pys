@@ -1,24 +1,14 @@
 import urlparse
 
-DEVELOPER_KEY = 'AI39si7PodNU93CVDU6kxh3-m2R9hkwqoVrfijDMr0L85J94ZrJFlimNxzFA9cSky9jCSHz9epJdps8yqHu1wb743d_SfSCRWA'
-YOUTUBE_VIDEO_DETAILS = 'http://gdata.youtube.com/feeds/api/videos/%s?v=2&alt=jsonc'
-ARD_VIDEO_FORMATS =	['S',		'M',	'L']
-ARD_FMT =			['0',		'1',	'2']
-ARD_CONTAINERS =	['mp4',		'mp4',	'mp4']
-ARD_VIDEORES =		['360',		'720',	'1080']
-ARD_VIDEOCODEC =	['h264',	'h264',	'h264']
-ARD_AUDIOCODEC =	['aac',		'aac',	'aac']
+ARD_VIDEO_FORMATS = ['S',    'M',    'L']
+ARD_FMT =           ['0',    '1',    '2']
+ARD_CONTAINERS =    ['mp4',  'mp4',  'mp4']
+ARD_VIDEORES =      ['144',  '288',  '544']
+ARD_VIDEOCODEC =    ['h264', 'h264', 'h264']
+ARD_AUDIOCODEC =    ['aac',  'aac',  'aac']
 
-HTTP_HEADERS = {'X-GData-Key':'key=%s' % DEVELOPER_KEY}
-#														  (1, 0, "", "http://mvideos.daserste.de/videoportal/Film/c_380000/384442/format479261.mp4", "default");
 RE_MEDIA_STREAMS = Regex('mediaCollection\.addMediaStream\(.*([0-9]+),.*([0-9]+).*,.*"([^"]*)",.*"([^"]*)",.*.*"([^"]*)"\);')
-RE_URL_MAP = Regex('"url_encoded_fmt_stream_map".+?"([^"]+)')
-RE_URL_MAP_ALT = Regex('&amp;url_encoded_fmt_stream_map=(.+?)&amp;')
-RE_PATH_1 = Regex('^/(watch|details)(_popup)?')
-RE_PATH_2 = Regex('^/[^/]+$')
-RE_VID_ID = Regex('/(v|e(mbed)?)/(v/)?(?P<id>.{11})')
-RE_VID_PID = Regex('pid=(.{11})')
-RE_VIDEO_ID = Regex('"video_id":\s"([^"]+)')
+
 
 ####################################################################################################
 def NormalizeURL(url):
@@ -69,25 +59,6 @@ def MediaObjectsForURL(url):
   return ret
 
 ####################################################################################################
-def PickMatch(fmts, index, match_format):
-
-  fmt = None
-  desired_container = ARD_CONTAINERS[index]
-  desired_codec = ARD_VIDEOCODEC[index]
-
-  # See if we can find the right quality.
-  for i in reversed(range(0, index+1)):
-    if ARD_FMT[i] in fmts:
-      this_container = ARD_CONTAINERS[i]
-      this_codec = ARD_VIDEOCODEC[i]
-      if match_format == False or (this_container == desired_container and this_codec == desired_codec):
-        Log(" -> PICKED %s %s/%s %s", ARD_CONTAINERS[i], ARD_VIDEOCODEC[i], ARD_AUDIOCODEC[i], ARD_VIDEORES[i])
-        fmt = ARD_FMT[i]
-        break
-
-  return fmt
-
-####################################################################################################
 @indirect
 def PlayVideo(url=None, default_fmt=None):
 
@@ -109,10 +80,13 @@ def PlayVideo(url=None, default_fmt=None):
   final_url = ''
   index = ARD_VIDEO_FORMATS.index(default_fmt)
   for s in streams:
-    if(s[0] == '1' and s[1] == ARD_FMT[index] and s[2] == ''):
+    if(s[0] == '1' and s[2] == ''):
       final_url = s[3];
-      break
+      if(int(s[1]) >= int(ARD_FMT[index]) and final_url != ''):
+        break
   
+  if final_url=='':
+    raise Ex.MediaNotAvailable
   
   Log("VIDEO URL (fmt=%s): %s", default_fmt, final_url)
 
